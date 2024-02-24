@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
 )
@@ -29,18 +28,25 @@ func StartServer(cfg *Config) error {
 	// 设置config
 	s := &server{config: cfg}
 
+	// 初始化日志
+	initLog(cfg)
+
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.config.Host, s.config.Port))
 	if err != nil {
+		logger.Error(err.Error())
 		return fmt.Errorf("failed to start listening: %w", err)
 	}
 	defer listener.Close()
 
+	logger.Info("SOCKS5 server listening on %s:%d", s.config.Host, s.config.Port)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			logger.Error(err.Error())
 			return fmt.Errorf("failed to accept connection: %w", err)
 		}
-
+		logger.Info("Accepted connection from %s", conn.RemoteAddr())
 		go s.handleSocks5Conn(conn)
 	}
 }
@@ -57,7 +63,7 @@ func (s *server) handleSocks5Conn(clientConn net.Conn) {
 		if bytes.Contains(authMethods, []byte{auth.GetCode()}) {
 			// 认证
 			if ok, err := auth.Authenticate(clientConn); err != nil {
-				log.Println(err)
+				logger.Info("Authenticate error: %v", err)
 				// 认证出现错误
 				clientConn.Close()
 				return
@@ -72,7 +78,7 @@ func (s *server) handleSocks5Conn(clientConn net.Conn) {
 	// 调用request函数实现请求阶段
 	var destConn net.Conn
 	if destConn, err = s.request(clientConn); err != nil {
-		log.Println(err)
+		logger.Info("Request error: %v", err)
 		clientConn.Close()
 		return
 	}
